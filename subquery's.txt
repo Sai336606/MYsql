@@ -1,0 +1,207 @@
+select * from movies;
+
+
+-- find movie which is having the highest score 
+select * from movies
+where score = (select max(score) from movies);
+
+#----------------------------------------------------------------Independent Subquery - Scaler Subquery----------------------------------------------------------------- 
+
+
+  #1 Find the movie with highest profits(vs order by)
+  #2 Find the how many movoes have rating > avg of the movies ratings(Find the cpunt of above avg movies)
+  #3 find the highest rated movies of 2000
+  #4 Find the highest ratedd movies among all  the movies whose numbers of votes are > the dataset avg vots
+  
+  #1 
+  select * from movies 
+  where (gross - budget) = (select  max(gross - budget) 
+										from movies);
+# OR
+
+select * from movies order by (gross-budget) DESC limit 1;
+
+#2) Find the how many movies have rating > avg of the movies ratings(Find the count of above avg movies)
+select count(*) from movies 
+where score > (select avg(score) 
+from movies);
+
+#3)  find the highest rated movies of 2000
+select * from movies 
+where year = 2000 
+and score =  (select max(score) from movies 
+ where year = 2000);
+
+#4)  Find the highest rated movies among all  the movies whose numbers of votes are > the dataset avg votes
+select * from movies where score = (select max(score) as max_score from movies 
+								    where votes > (select avg(votes) 
+									                from movies));
+
+
+#----------------------------------------------------------------Independent Subquery - Rowbased Subquery----------------------------------------------------------------- 
+
+# find the users who never placed an order
+# Find all the movies made by the top 3 directors (in terms of total gross income)
+
+#1)  find the users who never placed an order
+select distinct(user_id)from users where user_id 
+									not in (select distinct(user_id)
+                                    from orders);
+                                    
+                                    
+                                    
+#2)  Find all the movies made by the top 3 directors (in terms of total gross income)
+
+select * from movies where director IN (select director 
+								        from movies 
+										group by director 
+                                        order by sum(gross) desc 
+							            limit 3);
+# MYSQL DB IS NOT SUPPORTED FOR LIMIT, IN ,ALL, ANY IN MY THIS VERSION HOWEVER THEABOVE CODE WILL WORK ON OTHER DBs
+ -- OR
+
+WITH TOP_DIRECTORS AS (
+select director 
+from movies 
+group by director 
+order by sum(gross) desc 
+limit 3)
+SELECT * FROM movies
+WHERE director IN ( SELECT * FROM TOP_DIRECTORS);
+
+
+#3) Find all movies of all those actors whose filmography's avg rating > 8.5 (take 25000 votes as cutoff)
+select * from movies where star IN (select star from movies 
+                                   group by star 
+                                   having avg(score) > 8.5) AND VOTES >= 25000;
+                                   
+#----------------------------------------------------------------Independent Subquery - Table Subquery----------------------------------------------------------------- 
+ #1) Find the most profitable movie of each year
+ #2) Find the highest rated movie of each genre votes cutoff of 25000
+ #3) Find the highest grossing movies of top 5 actors/ directors combo in terms of total gross income
+ 
+  #1) Find the most profitable movie of each year
+  
+  select * from movies 
+  where (year,gross - budget) IN (select year, max(gross - budget) as profit
+						          from movies 
+						          group by year);
+#2) Find the highest rated movie of each genre votes cutoff of 25000
+
+SELECT * FROM MOVIES 
+where (genre,score) IN (SELECT genre,MAX(SCORE)
+FROM MOVIES 
+WHERE VOTES > 25000 
+GROUP BY genre)
+AND VOTES > 25000;
+
+#3) Find the highest grossing movies of top 5 actors / directors combo in terms of total gross income
+
+with top_dual as (select star,director,MAX(gross) as max_gross 
+					from movies
+					group by star,director
+					order by max_gross desc
+					limit 5)
+select * from movies
+where (star,director,gross) in (select * from top_dual);
+
+
+#----------------------------------------------------------------Correlated Subquery----------------------------------------------------------------- 
+# 1) find all the movies that have a rating higher than the avg rating of movies in the same genre.
+# 2) Find the favorite of each customer.
+
+# 1) find all the movies that have a rating higher than the avg rating of movies in the same genre.
+
+select * from movies m1
+where score > (select avg(score) as avg_rating from movies m2 where m2.genre = m1.genre);
+
+# 2) Find the favorite of each customer.
+
+WITH FAV_FOOD AS (select T1.user_id,name,f_name, COUNT(*) AS FREQ from users T1
+					JOIN ORDERS T2 ON T1.user_id = T2.user_id
+					JOIN order_details T3
+					ON T2.order_id = T3.order_id
+					JOIN food T4
+					ON T3.f_id = T4.f_id
+					group by T1.user_id,T4.f_id)
+SELECT * FROM FAV_FOOD F1
+WHERE FREQ = (SELECT MAX(FREQ) FROM FAV_FOOD F2 
+				WHERE F2.user_id = F1.user_id);
+                
+#----------------------------------------------------------------USAGE WITH SELECT--------------------------------------------------------------------------------------
+
+# 1) GET THE PERCENTAGE OF VOTES FOR EACH MOVIE COMPARED TO THE TOTAL NUMBERS OF VOTES
+# 2) DISPLAY ALL MOVIES NAMES, GENRE, SCORE, AND AVG(SCORE) OF GENRE 
+
+
+#1) GET THE PERCENTAGE OF VOTES FOR EACH MOVIE COMPARED TO THE TOTAL NUMBERS OF VOTES
+SELECT  name, (votes/(select sum(votes) from movies))*100 from movies;
+
+
+# 2) DISPLAY ALL MOVIES NAMES, GENRE, SCORE, AND AVG(SCORE) OF GENRE 
+select NAME,GENRE,SCORE,(select avg(score) from movies m2 where m1.GENRE = m2.GENRE) from movies m1;
+
+
+#----------------------------------------------------------------USAGE WITH FROM--------------------------------------------------------------------------------------
+#1) Display avg rating of all the restaurants
+
+
+SELECT  r_name,AVG_HOTEL_RATING 
+FROM (SELECT T1.r_id,AVG(restaurant_rating) AS AVG_HOTEL_RATING
+		FROM orders 
+        GROUP BY r_id) T1 
+		JOIN restaurants T2
+		ON T1.r_id = T2.r_id;
+
+# OR
+
+select * from restaurants;
+WITH RATE AS (
+select T1.r_id,T1.restaurant_rating,T2.r_name from orders T1
+join restaurants T2
+ON T1.r_id = T2.r_id)
+select r_name, AVG(restaurant_rating) from RATE GROUP BY r_name;
+
+
+#----------------------------------------------------------------USAGE WITH HAVING--------------------------------------------------------------------------------------
+
+# 1) FIND GENERS HAVING AVG SCORE > AVG SCORE OF ALL THE MOVIES
+SELECT  genre,AVG(score) FROM MOVIES FROUP GROUP BY genre HAVING AVG(score) > (SELECT AVG(score)  FROM movies);
+
+SELECT genre,AVG(score)  FROM movies GROUP BY genre;-- 'Music', '7.2'
+
+#----------------------------------------------------------------USAGE WITH INSERT--------------------------------------------------------------------------------------
+
+# 1) POPULATE A ALREADY CREATED LOYAL_CUSTOMER TABLE WITH RECORDS OF ONLY THOSE CUSTOMER WHO HAVE ORDERED FOOD MORE THAN 3 TIMES
+
+CREATE TABLE loyal_customer (user_id int,cust_name varchar(20), amt int);
+
+INSERT INTO loyal_customer (cust_id,cust_name)
+select T1.user_id ,T2.name
+from orders T1
+JOIN users T2
+ON T1.user_id = T2.user_id
+group by T1.user_id
+HAVING count(*) > 3;
+
+SELECT * FROM loyal_customer;
+
+
+#----------------------------------------------------------------USAGE WITH update--------------------------------------------------------------------------------------
+
+#1) POPULTE THE AMT COL OF LOYAL_CUST table USING ORDERS table. PROVIDE A 10%  APP MONEY TO ALL CUSTOMERS BASED ON THERE ORDER VALUE.
+
+UPDATE loyal_customer AS T1 SET amt =(SELECT (sum(amount)*0.1) AS DISCOUNT 
+										FROM ORDERS AS T2 
+										WHERE T1.user_id = T2.user_id  
+										GROUP BY user_id );
+                                        
+#----------------------------------------------------------------USAGE WITH DELETE--------------------------------------------------------------------------------------
+
+# 1) delete all the customers record who never ordered
+
+delete FROM USERS WHERE user_id IN (select user_id,name from users T1
+										WHERE user_id
+										NOT IN 
+										(SELECT user_id 
+										FROM orders T2));
